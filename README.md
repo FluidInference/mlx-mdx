@@ -1,5 +1,7 @@
 # ML Crawler
 
+[![Discord](https://img.shields.io/badge/Discord-Join%20Chat-7289da.svg)](https://discord.gg/WNsvaCtmDe)
+
 A command-line tool that renders web pages with Playwright, extracts the main article content, and converts it to Markdown using the `mlx-community/jinaai-ReaderLM-v2` model. Images referenced in the article are downloaded locally with size and type validation so the Markdown can be read fully offline.
 
 ## Quick Start
@@ -38,6 +40,10 @@ uvx --from playwright python -m playwright install chromium
 ```
 
 If you are working in a local virtual environment, run `python -m playwright install chromium` from within that environment instead.
+
+## Examples & Knowledge Base
+
+See how we publish MLX-produced Markdown, prompts, and knowledge bases in [möbius](https://github.com/FluidInference/mobius). The repo includes curated examples you can adapt for your own crawls.
 
 ## Features
 
