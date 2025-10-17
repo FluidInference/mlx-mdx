@@ -1,0 +1,26 @@
+[project]
+name = "mlx-crawler"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "beautifulsoup4",
+    "filetype",
+    "mlx",
+    "mlx-lm",
+    "numpy>=2.1.0",
+    "playwright",
+    "readability-lxml",
+    "requests",
+]
+
+[project.scripts]
+mlx-crawler = "mlx_crawler.cli:main"
+
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["mlx_crawler"]

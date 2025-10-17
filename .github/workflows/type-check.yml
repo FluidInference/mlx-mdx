@@ -1,0 +1,30 @@
+name: Type Check
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+
+jobs:
+  ty:
+    name: Run ty
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install uv
+        run: pip install uv
+
+      - name: Create virtual environment
+        run: uv venv --python 3.11
+
+      - name: Install project dependencies
+        run: uv pip install --python .venv/bin/python .
+
+      - name: Type check with ty
+        run: uv tool run ty check --python .venv/bin/python
