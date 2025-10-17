@@ -2,7 +2,9 @@
 
 [![Discord](https://img.shields.io/badge/Discord-Join%20Chat-7289da.svg)](https://discord.gg/WNsvaCtmDe)
 
-A command-line tool that renders web pages with Playwright, extracts the main article content, and converts it to Markdown using the `mlx-community/jinaai-ReaderLM-v2` model. Images referenced in the article are downloaded locally with size and type validation so the Markdown can be read fully offline.
+A command-line tool that renders web pages with Playwright, extracts the main article content, and converts it to Markdown using the `mlx-community/jinaai-ReaderLM-v2` model. Images referenced in the article are downloaded locally with size and type validation, so the Markdown can be read fully offline.
+
+It's a lightweight tool for our use cases, and you can extend it with VLMs, OCR models, or FluidAudio ASR to process images, PDFs, and speech-to-text. If you need more functionality, please open an issue—or even better, submit a PR.
 
 ## Quick Start
 
@@ -11,7 +13,7 @@ A command-line tool that renders web pages with Playwright, extracts the main ar
 Execute the CLI directly via `uvx`:
 
 ```bash
-uvx --from git+https://github.com/FluidInference/mlx-crawler.git mlx-crawler --help
+uvx --from git+https://github.com/FluidInference/mlx-crawler.git@v0.0.1 mlx-crawler --help
 ```
 
 This clones the repository into uv's cache, builds it, runs the `mlx-crawler` entry point, and keeps the build artifacts for future runs.
@@ -21,10 +23,10 @@ This clones the repository into uv's cache, builds it, runs the `mlx-crawler` en
 Keep the CLI on your `PATH` with a persistent install:
 
 ```bash
-uv tool install --from git+https://github.com/FluidInference/mlx-crawler.git mlx-crawler
+uv tool install --from git+https://github.com/FluidInference/mlx-crawler.git@v0.0.1 mlx-crawler
 ```
 
-Afterward you can invoke `mlx-crawler` directly.
+Afterward, you can invoke `mlx-crawler` directly.
 
 ### Work in a local checkout
 
@@ -43,7 +45,7 @@ If you are working in a local virtual environment, run `python -m playwright ins
 
 ## Examples & Knowledge Base
 
-See how we publish MLX-produced Markdown, prompts, and knowledge bases in [möbius](https://github.com/FluidInference/mobius). The repo includes curated examples you can adapt for your own crawls.
+See how we publish MLX-produced Markdown, prompts, and knowledge bases in [möbius](https://github.com/FluidInference/mobius). The repo includes curated examples you can adapt to your own crawls.
 
 ## Features
 
@@ -63,10 +65,10 @@ ReaderLM (MLX) rewrites the content as clean Markdown (no YAML in generation)
 Image pipeline downloads, validates, and relinks assets
   │
   ▼
-Outputs saved under <output>/<domain>/<slug>/index.md (+ images/)
+Outputs saved to <output>/<domain>/<slug>/index.md (with optional images/)
 ```
 
-CLI flags let you tune model choice, timeouts, token limits, logging, and more.
+CLI flags let you tune the model choice, timeouts, token limits, logging, and more.
 
 ## Prerequisites
 
@@ -115,7 +117,7 @@ The Markdown front matter records metadata such as the original URL and retrieva
 
 - The first run of a new model may take additional time while weights download from Hugging Face; subsequent runs reuse the cache.
 - Only common web image formats under 10 MB are saved; files smaller than 512 bytes are skipped to avoid placeholders.
-- Remove the output directory manually (`rm -rf output`) if you want to clear prior crawls.
+- Remove the output directory manually (`rm -rf output`) to clear prior crawls.
 - The crawler only processes URLs you provide; it does not follow links or perform multi-level site traversal.
 
 ## Disclaimer
