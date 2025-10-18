@@ -53,7 +53,7 @@ If you're not on [`uv`](https://docs.astral.sh/uv/getting-started/installation/)
 ### Run without installing with `uvx`
 
 ```bash
-uvx --from git+https://github.com/FluidInference/mlx-mdx.git@v0.0.3 mlx-mdx --help
+uvx --from git+https://github.com/FluidInference/mlx-mdx.git@v0.0.4 mlx-mdx --help
 ```
 
 `uvx` (an alias for `uv tool run`) clones the repository into uv's cache, builds it, and launches the `mlx-mdx` entry point—handy for trying the pipelines without installing anything permanently.
@@ -61,7 +61,7 @@ uvx --from git+https://github.com/FluidInference/mlx-mdx.git@v0.0.3 mlx-mdx --he
 ### Install as a uv tool
 
 ```bash
-uv tool install --from git+https://github.com/FluidInference/mlx-mdx.git@v0.0.3 mlx-mdx
+uv tool install --from git+https://github.com/FluidInference/mlx-mdx.git@v0.0.4 mlx-mdx
 
 uv tool run mlx-mdx -- crawl https://ml-explore.github.io/mlx/build/html/index.html --output output/mlx-docs --verbose
 
