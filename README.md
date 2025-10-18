@@ -1,4 +1,8 @@
-# MLX-Markdown
+<p align="left">
+  <img src="banner.png" alt="mlx-markdown banner" width="360" height="240">
+</p>
+
+# mlx-markdown
 
 [![Discord](https://img.shields.io/badge/Discord-Join%20Chat-7289da.svg)](https://discord.gg/WNsvaCtmDe)
 
