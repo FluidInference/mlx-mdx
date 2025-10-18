@@ -226,6 +226,8 @@ def _run_documents(args: argparse.Namespace) -> None:
         temperature=config.temperature,
         system_prompt=config.system_prompt,
         max_image_side=config.max_image_side,
+        figure_system_prompt=config.figure_system_prompt,
+        figure_summary_max_tokens=config.figure_summary_max_tokens,
     )
 
     overall_start = time.perf_counter()

@@ -10,6 +10,22 @@
 
 This will not give you cloud level performances but it gets you maybe 70-80% of the way there for quick use cases.
 
+The resulting Markdown stays LLM-ready—headings, tables, and figure takeaways are explicit—so you can feed it straight into retrieval pipelines or even wire `mlx-mdx` up as an MCP tool to auto-parse documents on demand.
+
+Before -> After: the graph in a PDF becomes structured text that mermaid can render.
+
+<div align="left">
+  <img src="mermaid-example.png" alt="Power of AI slide" width="280" style="display:inline-block; vertical-align:top; margin-right:12px;">
+  <span style="display:inline-block; font-size:28px; font-weight:600; vertical-align:top; margin-right:12px;">-&gt;</span>
+  <pre style="display:inline-block; vertical-align:top; max-width:320px; white-space:pre-wrap; word-break:break-word;"><code class="language-mermaid">graph LR
+    A[NVIDIA GPU VRAM] --> B[Scenario 1: Both CUDA and Mac devices have enough memory]
+    A --> C[Scenario 2: CUDA device has insufficient memory, but Mac device has enough memory]
+    A --> D[Scenario 3: Mac device has enough memory but quite near the capacity while CUDA device has insufficient memory]
+    B --> E[Apple Silicon Unified Memory]
+    C --> E
+    D --> E</code></pre>
+</div>
+
 ## Key Capabilities
 
 - `crawl`: Render websites with Playwright, isolate the readable article, and rewrite it with `mlx-community/jinaai-ReaderLM-v2`.
@@ -27,7 +43,7 @@ This will not give you cloud level performances but it gets you maybe 70-80% of 
 
 Choose the path that fits how you want to run the CLI.
 
-If you're not on [`uv`](https://docs.astral.sh/uv/getting-started/installation/) yet - you're missing out big. 
+If you're not on [`uv`](https://docs.astral.sh/uv/getting-started/installation/) yet - you're missing out big.
 
 `curl -LsSf https://astral.sh/uv/install.sh | sh`
 
@@ -78,6 +94,8 @@ uv tool run mlx-mdx -- document examples/2501.14925v2.pdf --output output/docs -
 
 Accepts PDFs, standalone images, or directories of page images. Each input becomes `output/documents/<slug>/index.md`.
 
+The VLM also looks at embedded charts and figures. Captions such as “Figure 4 …” are followed by a short `Figure insight:` summary so the Markdown captures the visual takeaway even when the image is absent.
+
 Useful flags:
 
 - `--model` — VLM identifier (default: `mlx-community/Nanonets-OCR2-3B-4bit`).
@@ -109,7 +127,6 @@ Document transcription produces:
 
 Browse `examples/` for sample outputs. For a larger knowledge base that uses these pipelines, see [möbius](https://github.com/FluidInference/mobius) and adapt the prompts or publishing recipes for your own content.
 
-
 ### Work from a local checkout
 
 1. `uv sync` — creates `.venv/` with the runtime dependencies.
@@ -118,7 +135,6 @@ Browse `examples/` for sample outputs. For a larger knowledge base that uses the
 4. _(Optional)_ `uv tool run ty check --python .venv/bin/python` — mirror the CI static type check.
 
 Use `uv run` for development tasks inside the synced virtual environment.
-
 
 ## Pipeline Overview
 
