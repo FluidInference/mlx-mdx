@@ -1,4 +1,4 @@
-# mlx-mdx (MLX-Markdown)
+# MLX-Markdown
 
 [![Discord](https://img.shields.io/badge/Discord-Join%20Chat-7289da.svg)](https://discord.gg/WNsvaCtmDe)
 
