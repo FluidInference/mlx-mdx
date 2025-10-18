@@ -8,7 +8,7 @@ import os
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, List, Optional, Sequence
+from typing import Any, List, Optional, Sequence, cast
 
 from mlx_lm import batch_generate as batch_generate_text
 from mlx_lm import load as load_model
@@ -220,10 +220,12 @@ class ReaderLMMarkdownGenerator:
     def _generate_from_prompts(self, prompts: Sequence[List[int]]) -> List[str]:
         """Generate Markdown bodies from prepared token sequences."""
         logger.debug("Running batch generation for %d prompt(s)", len(prompts))
+        prompt_batch = list(prompts)
         batch_result = batch_generate_text(
             self._model,
             self._tokenizer,
-            prompts=list(prompts),
+            # mlx_lm reports prompts as List[int], but supports batches of token lists.
+            prompts=cast(Any, prompt_batch),
             max_tokens=self.max_tokens,
             verbose=False,
         )
