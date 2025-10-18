@@ -10,7 +10,7 @@
 
 This will not give you cloud level performances but it gets you maybe 70-80% of the way there for quick use cases.
 
-The resulting Markdown stays LLM-ready—headings, tables, and figure takeaways are explicit—so you can feed it straight into retrieval pipelines or even wire `mlx-mdx` up as an MCP tool to auto-parse documents on demand.
+The resulting Markdown stays LLM-ready—headings, tables, and figure takeaways are explicit—so you can feed it straight into retrieval pipelines or even wire `mlx-mdx` up as an MCP tool to auto-parse documents on demand. This is particularly useful as not all codign agents can read or understand PDFs or deal with raw HTML.
 
 **Before -> After:**
 
