@@ -27,7 +27,7 @@ from .markdown import (
 from .models import PageMetadata
 from .utils import slugify
 
-logger = logging.getLogger("mlx_crawler")
+logger = logging.getLogger("mlx_mdx")
 
 
 @dataclass

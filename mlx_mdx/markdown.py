@@ -14,7 +14,7 @@ from mlx_lm import load as load_model
 
 from .models import ImageAsset, PageMetadata
 
-logger = logging.getLogger("mlx_crawler")
+logger = logging.getLogger("mlx_mdx")
 
 
 class ReaderLMMarkdownGenerator:

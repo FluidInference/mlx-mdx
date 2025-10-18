@@ -24,14 +24,17 @@ from .markdown import ReaderLMMarkdownGenerator, compose_markdown
 from .models import PageMetadata
 from .utils import slugify
 
-logger = logging.getLogger("mlx_crawler.documents")
+logger = logging.getLogger("mlx_mdx.documents")
 
 
 DEFAULT_OCR_MODEL_ID = "mlx-community/Nanonets-OCR2-3B-4bit"
 DEFAULT_OCR_SYSTEM_PROMPT = (
     "You transcribe document pages into clean Markdown. Reproduce layout faithfully "
-    "using headings, lists, and tables when relevant. Preserve math notation and spellings. "
-    "Return only Markdown without extra commentary."
+    "using headings, lists, tables, and other Markdown constructs when relevant. Preserve "
+    "math notation and spellings. For any charts, graphs, diagrams, maps, or photographs, "
+    "write a concise textual description that captures axes, labels, colors, trends, and "
+    "notable numeric values so a reader understands the visual. Recreate simple visuals "
+    "with Markdown tables or lists when feasible. Return only Markdown without extra commentary."
 )
 SUPPORTED_IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tif", ".tiff"}
 DEFAULT_PDF_DPI = 200
@@ -195,7 +198,8 @@ class DocumentOCRMarkdownGenerator:
 
         page_prompt = (
             f"Document: {document_name}. Page {page.index} of {total_pages}. "
-            "Transcribe the provided page to Markdown, preserving hierarchy, tables, and lists. "
+            "Transcribe the provided page to Markdown, preserving hierarchy, tables, lists, math, "
+            "and describing any visual elements in text so they can be understood without the image. "
             "Do not add commentary or restate the instructions."
         )
 
@@ -204,51 +208,53 @@ class DocumentOCRMarkdownGenerator:
             {"role": "user", "content": page_prompt},
         ]
 
-        formatted_prompt = cast(
+        image_argument = self._prepare_image_argument(page.image_input)
+        formatted_prompt = self._format_messages(messages, len(image_argument))
+        transcript = self._run_generation(formatted_prompt, image_argument)
+
+        return transcript
+
+    def _resize_image(self, image: Image.Image) -> Image.Image:
+        width, height = image.size
+        longest_edge = max(width, height)
+        if longest_edge <= self.max_image_side:
+            return image.copy()
+        scale = self.max_image_side / float(longest_edge)
+        new_size = (
+            max(1, int(width * scale)),
+            max(1, int(height * scale)),
+        )
+        return image.resize(new_size, Image.Resampling.LANCZOS)
+
+    def _prepare_image_argument(self, image_input: ImageInput) -> List[ImageInput]:
+        if isinstance(image_input, Image.Image):
+            return [self._resize_image(image_input)]
+
+        image_path = Path(image_input)
+        try:
+            with Image.open(image_path) as raw_image:
+                rgb_image = raw_image.convert('RGB')
+                resized = self._resize_image(rgb_image)
+                return [resized]
+        except (OSError, FileNotFoundError):
+            return [str(image_input)]
+
+    def _format_messages(self, messages: List[dict], num_images: int) -> str:
+        return cast(
             str,
             apply_chat_template(
                 self._processor,
                 self._config,
                 messages,
-                num_images=1,
+                num_images=num_images,
             ),
         )
 
-        image_argument: List[ImageInput]
-        if isinstance(page.image_input, Image.Image):
-            image = page.image_input
-            width, height = image.size
-            longest_edge = max(width, height)
-            if longest_edge > self.max_image_side:
-                scale = self.max_image_side / float(longest_edge)
-                new_size = (
-                    max(1, int(width * scale)),
-                    max(1, int(height * scale)),
-                )
-                image = image.resize(new_size, Image.Resampling.LANCZOS)
-            image_argument = [image]
-        else:
-            image_path = Path(page.image_input)
-            try:
-                with Image.open(image_path) as raw_image:
-                    image = raw_image.convert("RGB")
-                    width, height = image.size
-                    longest_edge = max(width, height)
-                    if longest_edge > self.max_image_side:
-                        scale = self.max_image_side / float(longest_edge)
-                        new_size = (
-                            max(1, int(width * scale)),
-                            max(1, int(height * scale)),
-                        )
-                        image = image.resize(new_size, Image.Resampling.LANCZOS)
-                    image_argument = [image.copy()]
-            except (OSError, FileNotFoundError):
-                image_argument = [str(page.image_input)]
-
+    def _run_generation(self, prompt: str, image_argument: List[ImageInput]) -> str:
         result = generate_text(
             self._model,
             self._processor,
-            formatted_prompt,
+            prompt,
             image=image_argument,
             temperature=self.temperature,
             max_tokens=self.max_tokens,
@@ -372,7 +378,14 @@ def process_document(
     full_markdown = compose_document_markdown(metadata, page_markdown)
     output_path = output_dir / "index.md"
     output_path.write_text(full_markdown, encoding="utf-8")
-    logger.info("Saved Markdown to %s", output_path)
+    logger.info(
+        "Processed %s in %.2fs (%d %s); saved Markdown to %s",
+        path,
+        total_elapsed,
+        total_pages,
+        "page" if total_pages == 1 else "pages",
+        output_path,
+    )
 
     return DocumentResult(
         source_path=path,

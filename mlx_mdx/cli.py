@@ -20,7 +20,7 @@ from .documents import (
 )
 from .markdown import ReaderLMMarkdownGenerator
 
-logger = logging.getLogger("mlx_crawler.cli")
+logger = logging.getLogger("mlx_mdx.cli")
 
 
 def _ensure_command_prefix(argv: Sequence[str], commands: Iterable[str]) -> Sequence[str]:

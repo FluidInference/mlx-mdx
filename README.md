@@ -19,7 +19,7 @@ This will not give you cloud level performances but it gets you maybe 70-80% of 
 ## Requirements
 
 - macOS on Apple Silicon (MLX requirement).
-- Python 3.12 or 3.13 (3.13 recommended).
+- Python 3.12 (recommended).
 - [uv](https://docs.astral.sh/uv/) 0.4+ for packaging and tooling.
 - Playwright Chromium binaries for the `crawl` subcommand (install once with `uvx --from playwright python -m playwright install chromium`).
 
@@ -34,31 +34,31 @@ If you're not on [`uv`](https://docs.astral.sh/uv/getting-started/installation/)
 ### Run without installing with `uvx`
 
 ```bash
-uvx --from git+https://github.com/FluidInference/mlx-crawler.git@v0.0.1 mlx-crawler --help
+uvx --from git+https://github.com/FluidInference/mlx-mdx.git@v0.0.1 mlx-mdx --help
 ```
 
-`uvx` (an alias for `uv tool run`) clones the repository into uv's cache, builds it, and launches the `mlx-crawler` entry point—handy for trying the pipelines without installing anything permanently.
+`uvx` (an alias for `uv tool run`) clones the repository into uv's cache, builds it, and launches the `mlx-mdx` entry point—handy for trying the pipelines without installing anything permanently.
 
 ### Install as a uv tool
 
 ```bash
-uv tool install --from git+https://github.com/FluidInference/mlx-crawler.git@v0.0.1 mlx-crawler
+uv tool install --from git+https://github.com/FluidInference/mlx-mdx.git@v0.0.1 mlx-mdx
 
-uv tool run mlx-crawler -- crawl https://ml-explore.github.io/mlx/build/html/index.html --output output/mlx-docs --verbose
+uv tool run mlx-mdx -- crawl https://ml-explore.github.io/mlx/build/html/index.html --output output/mlx-docs --verbose
 
-uv tool run mlx-crawler -- document examples/2501.14925v2.pdf --output output/mlx-docs --verbose
+uv tool run mlx-mdx -- document examples/2501.14925v2.pdf --output output/mlx-docs --verbose
 ```
 
 `uv tool run` ensures the tool executes inside the managed environment even if your shell `PATH` is unaware of `~/.local/bin`. Swap `crawl` for `document` to run the OCR pipeline.
 
 ## Usage
 
-The CLI exposes two focused subcommands. For backward compatibility, calling `mlx-crawler <url>` still routes to `crawl`.
+The CLI exposes two focused subcommands. For backward compatibility, calling `mlx-mdx <url>` still routes to `crawl`.
 
 ### Crawl websites
 
 ```bash
-uv tool run mlx-crawler -- crawl https://example.com --output output/example --verbose
+uv tool run mlx-mdx -- crawl https://example.com --output output/example --verbose
 ```
 
 Key options:
@@ -73,7 +73,7 @@ Key options:
 ### OCR documents or images
 
 ```bash
-uv tool run mlx-crawler -- document examples/2501.14925v2.pdf --output output/docs --verbose
+uv tool run mlx-mdx -- document examples/2501.14925v2.pdf --output output/docs --verbose
 ```
 
 Accepts PDFs, standalone images, or directories of page images. Each input becomes `output/documents/<slug>/index.md`.
@@ -114,7 +114,7 @@ Browse `examples/` for sample outputs. For a larger knowledge base that uses the
 
 1. `uv sync` — creates `.venv/` with the runtime dependencies.
 2. `uv run python -m playwright install chromium` — downloads the browser used by `crawl`.
-3. `uv run mlx-crawler crawl https://ml-explore.github.io/mlx/build/html/index.html --output output/mlx-docs --verbose`
+3. `uv run mlx-mdx crawl https://ml-explore.github.io/mlx/build/html/index.html --output output/mlx-docs --verbose`
 4. _(Optional)_ `uv tool run ty check --python .venv/bin/python` — mirror the CI static type check.
 
 Use `uv run` for development tasks inside the synced virtual environment.
