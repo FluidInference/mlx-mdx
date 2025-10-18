@@ -34,7 +34,7 @@ If you're not on [`uv`](https://docs.astral.sh/uv/getting-started/installation/)
 ### Run without installing with `uvx`
 
 ```bash
-uvx --from git+https://github.com/FluidInference/mlx-crawler.git@v0.0.1 mlx-crawler --help
+uvx --from git+https://github.com/FluidInference/mlx-crawler.git@v0.0.2 mlx-crawler --help
 ```
 
 `uvx` (an alias for `uv tool run`) clones the repository into uv's cache, builds it, and launches the `mlx-crawler` entry point—handy for trying the pipelines without installing anything permanently.
@@ -42,7 +42,7 @@ uvx --from git+https://github.com/FluidInference/mlx-crawler.git@v0.0.1 mlx-craw
 ### Install as a uv tool
 
 ```bash
-uv tool install --from git+https://github.com/FluidInference/mlx-crawler.git@v0.0.1 mlx-crawler
+uv tool install --from git+https://github.com/FluidInference/mlx-crawler.git@v0.0.2 mlx-crawler
 
 uv tool run mlx-crawler -- crawl https://ml-explore.github.io/mlx/build/html/index.html --output output/mlx-docs --verbose
 
