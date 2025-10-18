@@ -123,7 +123,7 @@ class DocumentOCRMarkdownGenerator:
                     allow_patterns=allow_patterns,
                 )
             )
-            logger.debug(
+            logger.info(
                 "Resolved cached OCR model for %s at %s (local_files_only=True)",
                 repo_id,
                 local_path,

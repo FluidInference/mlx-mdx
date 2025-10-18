@@ -67,7 +67,7 @@ class ReaderLMMarkdownGenerator:
                     allow_patterns=self._ALLOW_PATTERNS,
                 )
             )
-            logger.debug(
+            logger.info(
                 "Resolved cached model for %s at %s (local_files_only=True)",
                 repo_id,
                 local_path,
