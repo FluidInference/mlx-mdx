@@ -19,12 +19,13 @@ from .config import CrawlConfig
 from .content import extract_content
 from .images import download_images
 from .markdown import (
+    MarkdownRequest,
     ReaderLMMarkdownGenerator,
     compose_markdown,
     replace_image_links,
     strip_code_fence,
 )
-from .models import PageMetadata
+from .models import ImageAsset, PageMetadata
 from .utils import slugify
 
 logger = logging.getLogger("mlx_mdx")
@@ -39,6 +40,19 @@ class ProcessMetrics:
     total_seconds: float
     inference_seconds: float
     model_load_seconds: float
+
+
+@dataclass
+class PreparedPage:
+    """Prepared input ready for batch Markdown generation."""
+
+    url: str
+    metadata: PageMetadata
+    content_html: str
+    plain_text: str
+    assets: List[ImageAsset]
+    output_dir: Path
+    start_time: float
 
 
 def build_output_dir(config: CrawlConfig, metadata: PageMetadata) -> Path:
@@ -74,13 +88,12 @@ async def render_page(
     return html, final_url
 
 
-async def process_url(
+async def prepare_url(
     playwright: Playwright,
     url: str,
     config: CrawlConfig,
-    generator: ReaderLMMarkdownGenerator,
-) -> Optional[ProcessMetrics]:
-    """Process a single URL and persist the generated Markdown."""
+) -> Optional[PreparedPage]:
+    """Render a URL and prepare the inputs required for Markdown generation."""
     overall_start = time.perf_counter()
     try:
         html, final_url = await render_page(playwright, url, config)
@@ -97,29 +110,14 @@ async def process_url(
 
     output_dir = build_output_dir(config, metadata)
     assets = download_images(image_candidates, output_dir)
-    inference_start = time.perf_counter()
-    body_markdown = generator.generate_body(
-        metadata,
-        content_html,
-        plain_text,
-        assets,
-    )
-    inference_elapsed = time.perf_counter() - inference_start
-    load_elapsed = generator.consume_model_load_seconds()
-    body_markdown = strip_code_fence(body_markdown)
-    body_markdown = replace_image_links(body_markdown, assets)
-    markdown = compose_markdown(metadata, body_markdown, assets)
-
-    output_path = output_dir / "index.md"
-    output_path.write_text(markdown, encoding="utf-8")
-    logger.info("Saved Markdown to %s", output_path)
-    total_elapsed = time.perf_counter() - overall_start
-    return ProcessMetrics(
+    return PreparedPage(
         url=url,
-        output_path=output_path,
-        total_seconds=total_elapsed,
-        inference_seconds=inference_elapsed,
-        model_load_seconds=load_elapsed,
+        metadata=metadata,
+        content_html=content_html,
+        plain_text=plain_text,
+        assets=assets,
+        output_dir=output_dir,
+        start_time=overall_start,
     )
 
 
@@ -130,9 +128,62 @@ async def run_crawler(
 ) -> List[ProcessMetrics]:
     """Render each URL sequentially and feed results to the Markdown generator."""
     metrics: List[ProcessMetrics] = []
+    prepared_pages: List[PreparedPage] = []
     async with async_playwright() as playwright:
         for url in urls:
-            result = await process_url(playwright, url, config, generator)
-            if result:
-                metrics.append(result)
+            prepared = await prepare_url(playwright, url, config)
+            if prepared:
+                prepared_pages.append(prepared)
+
+    if not prepared_pages:
+        return metrics
+
+    requests = [
+        MarkdownRequest(
+            metadata=page.metadata,
+            content_html=page.content_html,
+            plain_text=page.plain_text,
+            images=page.assets,
+        )
+        for page in prepared_pages
+    ]
+
+    inference_start = time.perf_counter()
+    bodies = generator.generate_bodies(requests)
+    inference_elapsed = time.perf_counter() - inference_start
+
+    if len(bodies) != len(prepared_pages):
+        raise RuntimeError(
+            "Mismatch between generated bodies and prepared pages "
+            f"({len(bodies)} != {len(prepared_pages)})"
+        )
+
+    load_elapsed = generator.consume_model_load_seconds()
+    load_times = [0.0 for _ in prepared_pages]
+    if load_elapsed and load_times:
+        load_times[0] = load_elapsed
+
+    inference_per_item = (
+        inference_elapsed / len(prepared_pages) if prepared_pages else 0.0
+    )
+
+    for idx, (page, body_markdown) in enumerate(zip(prepared_pages, bodies)):
+        body_markdown = strip_code_fence(body_markdown)
+        body_markdown = replace_image_links(body_markdown, page.assets)
+        markdown = compose_markdown(page.metadata, body_markdown, page.assets)
+
+        output_path = page.output_dir / "index.md"
+        output_path.write_text(markdown, encoding="utf-8")
+        logger.info("Saved Markdown to %s", output_path)
+
+        total_elapsed = time.perf_counter() - page.start_time
+        metrics.append(
+            ProcessMetrics(
+                url=page.url,
+                output_path=output_path,
+                total_seconds=total_elapsed,
+                inference_seconds=inference_per_item,
+                model_load_seconds=load_times[idx],
+            )
+        )
     return metrics

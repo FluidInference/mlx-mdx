@@ -6,15 +6,26 @@ import datetime as dt
 import logging
 import os
 import time
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, List, Optional
+from typing import Any, List, Optional, Sequence
 
-from mlx_lm import generate as generate_text
+from mlx_lm import batch_generate as batch_generate_text
 from mlx_lm import load as load_model
 
 from .models import ImageAsset, PageMetadata
 
 logger = logging.getLogger("mlx_mdx")
+
+
+@dataclass
+class MarkdownRequest:
+    """Payload used for batch Markdown generation."""
+
+    metadata: PageMetadata
+    content_html: str
+    plain_text: str
+    images: List[ImageAsset]
 
 
 class ReaderLMMarkdownGenerator:
@@ -136,16 +147,14 @@ class ReaderLMMarkdownGenerator:
             return self._model_load_seconds
         return 0.0
 
-    def generate_body(
+    def _build_prompt(
         self,
         metadata: PageMetadata,
         content_html: str,
         plain_text: str,
         images: List[ImageAsset],
-    ) -> str:
-        """Produce Markdown body text from raw article content."""
-        self._ensure_model()
-
+    ) -> List[int]:
+        """Render a tokenized chat prompt for the ReaderLM model."""
         system_prompt = (
             "You convert rendered HTML from web articles into precise Markdown suitable for offline reading. "
             "Return only the Markdown body without any YAML front matter. Preserve headings, lists, tables, "
@@ -193,18 +202,71 @@ class ReaderLMMarkdownGenerator:
             {"role": "user", "content": user_content},
         ]
 
-        prompt = self._tokenizer.apply_chat_template(
-            messages, tokenize=False, add_generation_prompt=True
+        return self._tokenizer.apply_chat_template(
+            messages, tokenize=True, add_generation_prompt=True
         )
-        logger.debug("Prompt length: %s characters", len(prompt))
-        result = generate_text(
+
+    def _generate_from_prompts(self, prompts: Sequence[List[int]]) -> List[str]:
+        """Generate Markdown bodies from prepared token sequences."""
+        logger.debug("Running batch generation for %d prompt(s)", len(prompts))
+        batch_result = batch_generate_text(
             self._model,
             self._tokenizer,
-            prompt=prompt,
+            prompts=list(prompts),
             max_tokens=self.max_tokens,
             verbose=False,
         )
-        return result.strip()
+        return [text.strip() for text in batch_result.texts]
+
+    def generate_body(
+        self,
+        metadata: PageMetadata,
+        content_html: str,
+        plain_text: str,
+        images: List[ImageAsset],
+    ) -> str:
+        """Produce Markdown body text from raw article content."""
+        self._ensure_model()
+        prompt = self._build_prompt(metadata, content_html, plain_text, images)
+        logger.debug("Prompt token length: %d", len(prompt))
+        return self._generate_from_prompts([prompt])[0]
+
+    def generate_bodies(
+        self,
+        requests: Sequence[MarkdownRequest],
+    ) -> List[str]:
+        """Produce Markdown bodies for multiple requests in a single batch."""
+        if not requests:
+            return []
+
+        self._ensure_model()
+
+        # Limit batch size to 3 to prevent memory/processing issues
+        max_batch_size = 3
+        results: List[str] = []
+
+        for i in range(0, len(requests), max_batch_size):
+            batch = requests[i : i + max_batch_size]
+            logger.debug(
+                "Processing batch %d of %d (size: %d)",
+                (i // max_batch_size) + 1,
+                (len(requests) + max_batch_size - 1) // max_batch_size,
+                len(batch),
+            )
+
+            prompts = [
+                self._build_prompt(
+                    req.metadata,
+                    req.content_html,
+                    req.plain_text,
+                    req.images,
+                )
+                for req in batch
+            ]
+            batch_results = self._generate_from_prompts(prompts)
+            results.extend(batch_results)
+
+        return results
 
 
 def replace_image_links(markdown: str, assets: List[ImageAsset]) -> str:
