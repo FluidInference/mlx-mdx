@@ -38,6 +38,7 @@ class ProcessMetrics:
     output_path: Path
     total_seconds: float
     inference_seconds: float
+    model_load_seconds: float
 
 
 def build_output_dir(config: CrawlConfig, metadata: PageMetadata) -> Path:
@@ -104,6 +105,7 @@ async def process_url(
         assets,
     )
     inference_elapsed = time.perf_counter() - inference_start
+    load_elapsed = generator.consume_model_load_seconds()
     body_markdown = strip_code_fence(body_markdown)
     body_markdown = replace_image_links(body_markdown, assets)
     markdown = compose_markdown(metadata, body_markdown, assets)
@@ -117,6 +119,7 @@ async def process_url(
         output_path=output_path,
         total_seconds=total_elapsed,
         inference_seconds=inference_elapsed,
+        model_load_seconds=load_elapsed,
     )
 
 

@@ -9,8 +9,11 @@ dependencies = [
     "filetype",
     "mlx",
     "mlx-lm",
+    "mlx-vlm",
     "numpy>=2.1.0",
+    "pillow",
     "playwright",
+    "pypdfium2",
     "readability-lxml",
     "requests",
 ]

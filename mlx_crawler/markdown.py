@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import datetime as dt
 import logging
-from typing import Any, List
+import os
+import time
+from pathlib import Path
+from typing import Any, List, Optional
 
 from mlx_lm import generate as generate_text
 from mlx_lm import load as load_model
@@ -17,16 +20,121 @@ logger = logging.getLogger("mlx_crawler")
 class ReaderLMMarkdownGenerator:
     """Thin wrapper around the MLX ReaderLM model for Markdown generation."""
 
+    _ALLOW_PATTERNS = [
+        "*.json",
+        "model*.safetensors",
+        "*.py",
+        "tokenizer.model",
+        "*.tiktoken",
+        "tiktoken.model",
+        "*.txt",
+        "*.jsonl",
+        "*.jinja",
+    ]
+
     def __init__(self, model_id: str, max_tokens: int) -> None:
         self.model_id = model_id
         self.max_tokens = max_tokens
         self._model: Any = None
         self._tokenizer: Any = None
+        self._model_load_seconds: float = 0.0
+        self._model_load_reported = False
+        self._resolved_load_target: Optional[str] = None
+
+    def _resolve_env_override(self) -> Optional[Path]:
+        override = os.getenv("MODEL_DIR")
+        if not override:
+            return None
+        override_path = Path(override).expanduser()
+        if override_path.exists():
+            logger.debug("MODEL_DIR override detected at %s", override_path)
+            return override_path
+        logger.warning(
+            "MODEL_DIR is set to %s but the path does not exist; falling back to %s",
+            override_path,
+            self.model_id,
+        )
+        return None
+
+    def _resolve_snapshot_path(self, repo_id: str) -> Path:
+        from huggingface_hub import snapshot_download
+
+        try:
+            local_path = Path(
+                snapshot_download(
+                    repo_id,
+                    local_files_only=True,
+                    allow_patterns=self._ALLOW_PATTERNS,
+                )
+            )
+            logger.debug(
+                "Resolved cached model for %s at %s (local_files_only=True)",
+                repo_id,
+                local_path,
+            )
+            return local_path
+        except Exception as err:  # noqa: BLE001 - propagate diagnostics
+            logger.info(
+                "Local cache for %s was not found (%s); attempting snapshot download.",
+                repo_id,
+                err,
+            )
+            local_path = Path(
+                snapshot_download(repo_id, allow_patterns=self._ALLOW_PATTERNS)
+            )
+            logger.debug("Downloaded model %s to %s", repo_id, local_path)
+            return local_path
+
+    def _determine_load_target(self) -> str:
+        if self._resolved_load_target:
+            return self._resolved_load_target
+
+        env_override = self._resolve_env_override()
+        if env_override:
+            self._resolved_load_target = str(env_override)
+            return self._resolved_load_target
+
+        candidate = Path(self.model_id).expanduser()
+        if candidate.exists():
+            logger.debug(
+                "Model identifier %s resolves to local path %s",
+                self.model_id,
+                candidate,
+            )
+            self._resolved_load_target = str(candidate)
+            return self._resolved_load_target
+
+        snapshot_path = self._resolve_snapshot_path(self.model_id)
+        self._resolved_load_target = str(snapshot_path)
+        return self._resolved_load_target
 
     def _ensure_model(self) -> None:
         if self._model is None or self._tokenizer is None:
-            logger.info("Loading model %s", self.model_id)
-            self._model, self._tokenizer = load_model(self.model_id)
+            load_target = self._determine_load_target()
+            if load_target != self.model_id:
+                logger.info(
+                    "Loading model %s (resolved from %s)",
+                    load_target,
+                    self.model_id,
+                )
+            else:
+                logger.info("Loading model %s", load_target)
+            start = time.perf_counter()
+            self._model, self._tokenizer = load_model(load_target)
+            self._model_load_seconds = time.perf_counter() - start
+            self._model_load_reported = False
+            logger.debug(
+                "Loaded model from %s in %.2fs",
+                load_target,
+                self._model_load_seconds,
+            )
+
+    def consume_model_load_seconds(self) -> float:
+        """Return the model load time once per load event."""
+        if not self._model_load_reported and self._model_load_seconds:
+            self._model_load_reported = True
+            return self._model_load_seconds
+        return 0.0
 
     def generate_body(
         self,

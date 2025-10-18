@@ -5,20 +5,34 @@ from __future__ import annotations
 import argparse
 import asyncio
 import logging
+import sys
 import time
 from pathlib import Path
+from typing import Iterable, Sequence
 
 from .config import CrawlConfig, DEFAULT_MODEL_ID
 from .crawler import run_crawler
+from .documents import (
+    DEFAULT_OCR_SYSTEM_PROMPT,
+    DocumentConfig,
+    DocumentOCRMarkdownGenerator,
+    process_document,
+)
 from .markdown import ReaderLMMarkdownGenerator
 
 logger = logging.getLogger("mlx_crawler.cli")
 
 
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description="Render websites via Playwright and convert them to Markdown using the MLX ReaderLM model.",
-    )
+def _ensure_command_prefix(argv: Sequence[str], commands: Iterable[str]) -> Sequence[str]:
+    if not argv:
+        return argv
+    first = argv[0]
+    if first in commands or first.startswith("-"):
+        return argv
+    return ("crawl", *argv)
+
+
+def _add_crawl_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("urls", nargs="+", help="One or more URLs to capture")
     parser.add_argument(
         "--output",
@@ -66,14 +80,91 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Enable verbose logging",
     )
-    return parser.parse_args()
 
 
-def main() -> None:
-    args = parse_args()
+def _add_document_arguments(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "paths",
+        nargs="+",
+        type=Path,
+        help="Document PDFs, standalone images, or directories of page images to process",
+    )
+    parser.add_argument(
+        "--output",
+        default="output",
+        type=Path,
+        help="Directory where Markdown and assets should be written",
+    )
+    parser.add_argument(
+        "--model",
+        default="mlx-community/Nanonets-OCR2-3B-4bit",
+        help="MLX VLM identifier to use for OCR",
+    )
+    parser.add_argument(
+        "--max-tokens",
+        type=int,
+        default=2048,
+        help="Maximum number of tokens to generate per page",
+    )
+    parser.add_argument(
+        "--temperature",
+        type=float,
+        default=0.0,
+        help="Sampling temperature for the OCR model",
+    )
+    parser.add_argument(
+        "--pdf-dpi",
+        type=int,
+        default=200,
+        help="Render PDFs at this DPI before OCR (default: 200).",
+    )
+    parser.add_argument(
+        "--max-image-side",
+        type=int,
+        default=2048,
+        help="Resize images so the longest edge is at most this many pixels before OCR",
+    )
+    parser.add_argument(
+        "--system-prompt",
+        type=str,
+        default=None,
+        help="Override the default OCR system prompt",
+    )
+    parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="Enable verbose logging",
+    )
+
+
+def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description=(
+            "Render websites via Playwright or transcribe document images to Markdown using MLX models."
+        ),
+    )
+    subparsers = parser.add_subparsers(dest="command", required=True)
+
+    crawl_parser = subparsers.add_parser(
+        "crawl", help="Render web pages and convert them to Markdown"
+    )
+    _add_crawl_arguments(crawl_parser)
+
+    document_parser = subparsers.add_parser(
+        "document", help="Transcribe documents with the Nanonets OCR model"
+    )
+    _add_document_arguments(document_parser)
+
+    argv = list(sys.argv[1:] if argv is None else argv)
+    argv = list(_ensure_command_prefix(argv, subparsers.choices.keys()))
+    return parser.parse_args(argv)
+
+
+def _run_crawl(args: argparse.Namespace) -> None:
     logging.basicConfig(
         level=logging.DEBUG if args.verbose else logging.INFO,
-        format="[%(levelname)s] %(message)s",
+        format="%(asctime)s [%(levelname)s] %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
     )
 
     config = CrawlConfig(
@@ -104,11 +195,74 @@ def main() -> None:
         )
         for metric in metrics:
             logger.debug(
-                "Timing for %s -> total: %.2fs | inference: %.2fs",
+                "Timing for %s -> total: %.2fs | inference: %.2fs | model_load: %.2fs",
                 metric.url,
                 metric.total_seconds,
                 metric.inference_seconds,
+                metric.model_load_seconds,
             )
+
+
+def _run_documents(args: argparse.Namespace) -> None:
+    logging.basicConfig(
+        level=logging.DEBUG if args.verbose else logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
+
+    config = DocumentConfig(
+        output_root=Path(args.output).resolve(),
+        model_id=args.model,
+        max_tokens=args.max_tokens,
+        temperature=args.temperature,
+        system_prompt=args.system_prompt or DEFAULT_OCR_SYSTEM_PROMPT,
+        pdf_dpi=args.pdf_dpi,
+        max_image_side=args.max_image_side,
+    )
+
+    generator = DocumentOCRMarkdownGenerator(
+        config.model_id,
+        config.max_tokens,
+        temperature=config.temperature,
+        system_prompt=config.system_prompt,
+        max_image_side=config.max_image_side,
+    )
+
+    overall_start = time.perf_counter()
+    results = []
+    for path in args.paths:
+        result = process_document(path, config, generator)
+        if result:
+            results.append(result)
+    total_elapsed = time.perf_counter() - overall_start
+
+    if args.verbose:
+        successes = len(results)
+        total_inputs = len(args.paths)
+        failures = total_inputs - successes
+        logger.debug(
+            "Document OCR finished in %.2fs (%d/%d succeeded, %d failed)",
+            total_elapsed,
+            successes,
+            total_inputs,
+            failures,
+        )
+        for res in results:
+            logger.debug(
+                "Processed %s -> %s (pages=%d, elapsed=%.2fs)",
+                res.source_path,
+                res.output_path,
+                res.page_count,
+                res.total_seconds,
+            )
+
+
+def main(argv: Sequence[str] | None = None) -> None:
+    args = parse_args(argv)
+    if args.command == "crawl":
+        _run_crawl(args)
+    else:
+        _run_documents(args)
 
 
 if __name__ == "__main__":
