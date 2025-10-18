@@ -1,7 +1,7 @@
 ---
 title: 2501.14925v2
 source_url: file:///Users/brandonweng/code/mlx-mdx/examples/2501.14925v2.pdf
-retrieved_at: 2025-10-18T01:36:45Z
+retrieved_at: 2025-10-18T05:27:23Z
 ---
 # Profiling Apple Silicon Performance for ML Training
 
@@ -22,7 +22,7 @@ felixlin@virginia.edu
 
 ---
 
-**ABSTRACT**
+## ABSTRACT
 
 Apple Silicon has attracted much attention for its performance and role in machine learning (ML) training. Unlike NVIDIA GPUs, which have traditionally dominated ML training, Apple Silicon has a significant difference in memory architecture. It uses Unified Memory, which integrates CPU and GPU memory instead of separate CPU memory and GPU VRAM. However, it is difficult to tell whether Unified Memory means more performance benefits.
 
@@ -32,7 +32,11 @@ GPU constraints, offering a portable, cost-effective alternative to traditional 
 
 This paper focuses on the scenario under the single-chip LLM training and fine-tuning, explores the potential and limitations of Apple Silicon, and studies its architectural advantages, memory management capabilities, and performance trade-offs. Ultimately, our goal is to evaluate whether Apple devices like MacBooks can provide a viable and accessible solution for ML training, thereby bridging the gap between professional hardware and consumer-level options. We mainly answer the following questions in this paper: (1) What are the specific advantages and disadvantages of Apple Silicon and NVIDIA GPUs in LLM training? (2) What may be the reasons for these advantages and disadvantages of Apple Silicon? (3) How can Apple Silicon be used for LLM training to achieve more satisfactory performance?
 
----
+## 1 INTRODUCTION
+
+The rapid growth of large language models (LLMs) has expanded machine learning research while introducing significant computational and memory challenges. As LLM sizes increase, their memory requirements often surpass the VRAM limits of high-end GPUs, complicating large-scale training on standard GPU setups. This typically necessitates complex scheduling algorithms, reducing training efficiency. Consequently, access to sufficient training resources has become a major hurdle, particularly for independent researchers and small institutions.
+
+Apple Silicon marks a shift with its M1 and M2 chips, unifying CPU, GPU, and Neural Engine in a unified memory pool of up to 128GB. This architecture addresses VRAM-limited
 
 \* The first author and second author contribute equally to this work.
 
@@ -41,10 +45,6 @@ This paper focuses on the scenario under the single-chip LLM training and fine-t
 Conference’17, July 2017, Washington, DC, USA
 2025. ACM ISBN 978-x-xxxx-xxxx-x/YY/MM...$15.00
 https://doi.org/10.1145/nnnnnnn.nnnnnnn
-
----
-
-arXiv:2501.14925v2 [cs.PF] 28 Jan 2025
 
 
 <!-- page 1 end -->
@@ -83,6 +83,7 @@ We use several servers and devices to conduct our experiments. We mainly focus o
 ---
 
 **Figure 1: The software/hardware stack for ML training, showing for both Apple GPU and NVIDIA GPU.**
+> Figure insight: Figure 1: The software/hardware stack for ML training, showing for both Apple GPU and NVIDIA GPU.
 
 ML Workloads
 
@@ -124,6 +125,47 @@ In the first benchmark, we pre-train the medium checkpoint of the Whisper model 
 
 We have to admit that all Apple silicon SoCs underperform Nvidia GPUs under this circumstance. The most significant difference between the two kinds of devices during training
 
+---
+
+**Table 2: The workloads we used in our experiments, with AdamW optimizer.**
+
+| Workload | Parameters(M) | Theoretical Memory (GiB) |
+|----------|---------------|--------------------------|
+| Whisper-medium | 769 | 12.016 |
+| Whisper-large | 1550 | 24.219 |
+| GPT2-large | 774 | 12.094 |
+| GPT2-XL | 1558 | 24.344 |
+
+---
+
+**Table 3: The configuration of our experiments for end-to-end training on the Hugging Face platform.**
+
+| Scenario | Workload | Batch Size | Testbed |
+|----------|----------|-----------|---------|
+| 1        | Whisper-medium | 4 | NVIDIA GeForce RTX 4090 |
+|          | Whisper-medium | 4 | NVIDIA RTX A6000 |
+|          | Whisper-medium | 4 | M2 Ultra |
+|          | Whisper-medium | 4 | M2 Max |
+|          | GPT2-large | 16 | NVIDIA GeForce RTX 4090 |
+|          | GPT2-large | 16 | NVIDIA RTX A6000 |
+|          | GPT2-large | 16 | M2 Ultra |
+|          | GPT2-large | 16 | M2 Max |
+|          | GPT2-large | 16 | M2 Pro |
+| 2        | Whisper-medium | 4 | Quadro RTX 4000 |
+|          | Whisper-medium | 4 | NVIDIA RTX 2080Ti |
+|          | GPT2-XL | 16 | NVIDIA GeForce RTX 4090 |
+|          | Whisper-large | 32 | M2 Max |
+
+---
+
+### 3.2 Methodologies
+
+In our experiment, we select a representative set of the most widely used workloads in the training and fine-tuning of large models. Specifically, we conduct experiments on two modalities of data, i.e., speech and text.
+
+For speech, we choose Whisper, an automatic speech recognition model designed to transcribe spoken words into text with high accuracy for multiple languages and dialects [15]. Based on the Transformer architecture [18], Whisper is computationally intensive, requiring a lot of memory and processing resources to manage its large number of parameters and operate efficiently on complex audio data. Due to the model complexity, we pretrain the medium variation of Whisper.
+
+For text, we both choose GPT-2 [16], a classic large language model that precedes Whisper but is built on the same Transformer architecture. The computational complexity and memory footprint of GPT-2 is slightly less than that of Whisper, making it a great example of examining whether less computationally capable Apple Silicon devices can be
+
 
 <!-- page 3 end -->
 
@@ -150,14 +192,20 @@ In addition, we pre-train the GPT2-large with the MLX framework on M2 Ultra, M2 
 ---
 
 **Figure 3: The forward time, backward time on different devices on the two workloads.**
+> Figure insight: Figure 3: The forward time, backward time on different devices on the two workloads. Table 4: The time of each pass during GPT2-large pre-training without the Hugging Face platform. | Testbed | Workload | Batch Size | MLX/CUDA One Pass Time(s) | MPS One Pass Time(s) | |---|---|---|---|---| | M2 Ultra | | 8 | 2.710 | 3.239 | | M2 Max | GPT-large | 4 | 2.924 | 3.645 | | M2 Pro | | 2 | 8.692 | 10.704 | | A6000 | | 8 | 2.771 | - | is memory usage. On all CUDA devices, memory usage is relatively stable, which means that NVIDIA GPUs transfer almost all required data to VRAM at once during training; on Apple Silicon, memory usage(RSS) increases gradually, which means that Apple Silicon gradually transfers required data to Unified Memory during training. In addition, we pre-train the GPT2-large with the MLX framework on M2 Ultra, M
 
 (a) All the devices have sufficient memory.
+
+(1) Pretrain Whisper-medium with the batch size of 4.
+(2) Fine-tune (without LoRA) GPT2-large with the batch size of 16.
+(3) Fine-tune (with LoRA) GPT2-large with the batch size of 16.
 
 (b) CUDA devices are applied with ZeRO-Offload.
 
 ---
 
 **Figure 4: Memory consumption over time during near-capacity training of Whisper-large on M2 Max.**
+> Figure insight: Figure 4: Memory consumption over time during near-capacity training of Whisper-large on M2 Max. Looking at the above scenarios together, we can draw the following conclusions: (1) Apple Silicons underperform the
 
 ---
 
@@ -169,33 +217,27 @@ Looking at the above scenarios together, we can draw the following conclusions: 
 
 other NVIDIA GPUs when the memory footprint required is lower than the capacity of NVIDIA GPUs; (2) Apple Silicons have a better performance when the VRAM of GPUs is not enough and ZeRO-Offload must be applied.
 
-## 4.2 Energy efficiency
-
+4.2 Energy efficiency
 We also measure and record the GPU energy consumption per iteration of each device during the training the medium checkpoint of the Whisper model on the Common Voice dataset with the batch size of 4 and data type of FP32 (in Scenario 1).
 
 In terms of the energy efficiency of the training, we observe that Apple Silicon demonstrates superior energy efficiency compared to other hardware platforms. As shown in the measurements shown in Table.5, the energy consumption per iteration of two Apple Silicon devices is similar to RTX 4090 and much better than A6000. Moreover, considering that the Nvidia GPU platforms need additional power supply for their CPU and memory, which will usually be about 70W [11], the gap would be further widened. The improvement in power efficiency not only reduces costs in training but also aligns with sustainable practices by reducing total energy consumption.
 
-## 4.3 System issues
-
+4.3 System issues
 To further explain the performance gap in end-to-end training, we will move to the system level.
 
-**Memory usage over time** As mentioned before, Apple Silicons seem to have a greatly different mechanism of memory management from NVIDIA GPUs. Regardless of the workload, Apple Silicon’s memory consumption during training shows a gradual increase, rather than maintaining relatively stable like NVIDIA GPUs, which may be a major reason for the underperformance of Apple Silicon in LLM training.
+Memory usage over time As mentioned before, Apple Silicons seem to have a greatly different mechanism of memory management from NVIDIA GPUs. Regardless of the workload, Apple Silicon’s memory consumption during training shows a gradual increase, rather than maintaining relatively stable like NVIDIA GPUs, which may be a major reason for the underperformance of Apple Silicon in LLM training.
 
-**Page faults over time** To get a better understanding of the overhead of the memory management of Apple Silicon during the training process, we measure the number of page faults of M2 Max when we pre-train the medium checkpoint of the Whisper model in Scenario 1. With the iteration of passes, the number of page faults is increasing gradually, which indicates that Mac triggers the page fault continuously in an attempt to transfer some data into memory. We also measure the number of page faults of M2 Max during the large checkpoint of the Whisper model pre-training with the batch size of 32 in Scenario 3. In this case, the actual memory required is near the SoC capacity, and more page faults are triggered with a stronger growth trend.
+Page faults over time To get a better understanding of the overhead of the memory management of Apple Silicon during the training process, we measure the number of page faults of M2 Max when we pre-train the medium checkpoint of the Whisper model in Scenario 1. With the iteration of passes, the number of page faults is increasing gradually, which indicates that Mac triggers the page fault continuously in an attempt to transfer some data into memory. We also measure the number of page faults of M2 Max during the large checkpoint of the Whisper model pre-training with the batch size of 32 in Scenario 3. In this case, the actual memory required is near the SoC capacity, and more page faults are triggered with a stronger growth trend.
 
-**Overhead of the GPU runtime** We conduct the experiment to measure the latency of the kernel launch on CUDA devices and Apple devices respectively, which is the layer below the BLAS and MLX. Table 6 shows the kernel launch time during the multiple iterations. The "cold launch" (i.e. the first time launching a kernel) is slower than the following launch and CUDA devices get less latency than Apple Silicon chips. Then when we repeatedly launch the kernel, the latency on CUDA devices is still much lower than that on Apple Silicon. Some common belief may be that Apple Silicon has a more optimized kernel launch time thanks to the unified memory architecture; however, our measurement shows the contract results. Besides, we do not observe any thermal-related issues on Apple silicon devices.
+Overhead of the GPU runtime We conduct the experiment to measure the latency of the kernel launch on CUDA devices and Apple devices respectively, which is the layer below the BLAS and MLX. Table 6 shows the kernel launch time during the multiple iterations. The "cold launch" (i.e. the first time launching a kernel) is slower than the following launch and CUDA devices get less latency than Apple Silicon chips. Then when we repeatedly launch the kernel, the latency on CUDA devices is still much lower than that on Apple Silicon. Some common belief may be that Apple Silicon has a more optimized kernel launch time thanks to the unified memory architecture; however, our measurement shows the contract results. Besides, we do not observe any thermal-related issues on Apple silicon devices.
 
----
-
-**Table 5: The GPU energy consumption per iteration of each device during the training.**
+Table 5: The GPU energy consumption per iteration of each device during the training.
 
 | Testbed | M2 Ultra | M2 MAX | A6000 | RTX 4090 |
 |---|---|---|---|---|
-| **Energy per Iteration(J)** | 114.86 | 129.30 | 212.39 | 108.58 |
+| Energy per Iteration(J) | 114.86 | 129.30 | 212.39 | 108.58 |
 
----
-
-**Table 6: Kernel launch time on different devices.**
+Table 6: Kernel launch time on different devices.
 
 | Testbed | Cold Launch Time(ms) | Follow-up Launch Time(ms) |
 |---|---|---|
@@ -207,18 +249,10 @@ To further explain the performance gap in end-to-end training, we will move to t
 | 2080Ti | 0.0845 | 0.0053 |
 | RTX 4000 | 0.1750 | 0.0046 |
 
----
+Figure 5: Measurements on Matrix-Matrix product.
+> Figure insight: The figure shows the throughput (ops/sec) for Matrix-Matrix product on different testbeds. The throughput is higher for NVIDIA GPUs (FP32) than for Apple Silicon GPUs (FP16). The throughput for NVIDIA GPUs decreases with the batch size, while for Apple Silicon GPUs, the throughput remains relatively stable.
 
-**Figure 5: Measurements on Matrix-Matrix product.**
-
-(a) A6000 and M2 Ultra.
-(b) RTX 2080Ti and M2 Max.
-(c) RTX 4000 and M2 Pro.
-
----
-
-## 4.4 BLAS kernel analysis
-
+4.4 BLAS kernel analysis
 To explain the performance gap, we dive into basic linear algebra subprograms (BLAS) performance differences between NVIDIA GPUs and Apple Silicon GPUs. Since the majority of operations of neural networks are on matrices, BLAS performance largely determines the aforementioned performance of end-to-end training [10].
 
 We conduct the experiments on Matrix-Matrix Product, Matrix-Vector Product, and Vector-Jacobian Product respectively across a variety of shapes. Additionally, we benchmark both the FP16 and FP32 data types. Based on computing power, we compare the computing throughput of A6000 and M2 Ultra, 2080Ti and M2 Max, and RTX4000 and M2 Pro. We use both MPS in Pytorch and MLX framework for Apple Silicon and CUDA in Pytorch for NVIDIA GPUs as the
@@ -246,6 +280,7 @@ In CUDA cases, using FP16 can obtain an obvious (about 5x-6x) acceleration compa
 ---
 
 **Figure 6: Measurements on Matrix-Vector product.**
+> Figure insight: The figure shows the performance of different GPU architectures (MLX, CUDA, MPS) for Matrix-Vector Product operations with various matrix shapes and data types. Notable trends include the performance gap between MLX and CUDA narrowing with FP16, and MPS showing similar performance to MLX.
 
 (a) Comparison between A6000 and M2 Ultra.
 (b) Comparison between RTX 2080Ti and M2 Max.
@@ -254,6 +289,7 @@ In CUDA cases, using FP16 can obtain an obvious (about 5x-6x) acceleration compa
 ---
 
 **Figure 7: Measurements on Vector-Jacobian Product.**
+> Figure insight: Figure 7: Measurements on Vector-Jacobian Product. Software support. As we mentioned in 4.3, the cold launch will have an apparently longer latency than the follow-up launch. Thus, in order to eliminate the impact that the cold launch may cause, we first warm up for 10 iterations and then launch the kernel 100 times continuously and repeatedly and report the average of all these results to reduce the effect of unsteadiness. Matrix-Matrix Product We benchmark Batched Matrix-Matrix Product for the batch size of 8 and matrix shapes of (2000*2000), which are common in latest transformer-based LLMs. The benchmark results are shown in Figure 5. NVIDIA GPUs, which have support for Tensor Cores, can get more acceleration when using FP16 instead of FP32, while MPS can hardly get any benefits and MLX can get only about 20%-30% benefit. With FP16, MLX underperforms under all the conditions compared to CUDA but has a better performance than MPS in most cases. This may be because the Tensor Cores of NVIDIA GPUs have very good optimized support for FP16-type operations, and this support is not yet perfect in
 
 (a) Comparison between A6000 and M2 Ultra.
 (b) Comparison between RTX 2080Ti and M2 Max.

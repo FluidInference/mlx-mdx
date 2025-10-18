@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -24,18 +25,32 @@ from .markdown import ReaderLMMarkdownGenerator, compose_markdown
 from .models import PageMetadata
 from .utils import slugify
 
-logger = logging.getLogger("mlx_crawler.documents")
+logger = logging.getLogger("mlx_mdx.documents")
 
 
 DEFAULT_OCR_MODEL_ID = "mlx-community/Nanonets-OCR2-3B-4bit"
 DEFAULT_OCR_SYSTEM_PROMPT = (
     "You transcribe document pages into clean Markdown. Reproduce layout faithfully "
-    "using headings, lists, and tables when relevant. Preserve math notation and spellings. "
-    "Return only Markdown without extra commentary."
+    "using headings, lists, tables, and other Markdown constructs when relevant. Preserve "
+    "math notation and spellings. For any charts, graphs, diagrams, maps, or photographs, "
+    "write a concise textual description that captures axes, labels, colors, trends, and "
+    "notable numeric values so a reader understands the visual. Recreate simple visuals "
+    "with Markdown tables or lists when feasible. Return only Markdown without extra commentary."
+)
+DEFAULT_FIGURE_SYSTEM_PROMPT = (
+    "You summarize charts, graphs, and figures shown within document pages. Focus on the "
+    "main takeaway in one or two sentences, calling out axes, units, directionality, relative "
+    "performance, and notable numeric values when legible. If the visual cannot be read, reply "
+    "with 'Unable to summarize figure.' without additional commentary."
 )
 SUPPORTED_IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tif", ".tiff"}
 DEFAULT_PDF_DPI = 200
 DEFAULT_MAX_IMAGE_SIDE = 2048
+DEFAULT_FIGURE_SUMMARY_PREFIX = "Figure insight"
+FIGURE_CAPTION_PATTERN = re.compile(
+    r'^\s*\*{0,2}\s*(?P<caption>(?:fig(?:ure)?\.?)\s+\d+[^\n]*?)\s*\*{0,2}\s*$',
+    re.IGNORECASE,
+)
 
 
 ImageInput = Union[str, Image.Image]
@@ -52,6 +67,8 @@ class DocumentConfig:
     system_prompt: str = DEFAULT_OCR_SYSTEM_PROMPT
     pdf_dpi: int = DEFAULT_PDF_DPI
     max_image_side: int = DEFAULT_MAX_IMAGE_SIDE
+    figure_system_prompt: str = DEFAULT_FIGURE_SYSTEM_PROMPT
+    figure_summary_max_tokens: int = 256
 
 
 @dataclass
@@ -83,12 +100,17 @@ class DocumentOCRMarkdownGenerator:
         temperature: float = 0.0,
         system_prompt: str | None = None,
         max_image_side: int = DEFAULT_MAX_IMAGE_SIDE,
+        figure_system_prompt: str | None = None,
+        figure_summary_max_tokens: int = 256,
     ) -> None:
         self.model_id = model_id
         self.max_tokens = max_tokens
         self.temperature = temperature
         self.system_prompt = system_prompt or DEFAULT_OCR_SYSTEM_PROMPT
         self.max_image_side = max_image_side
+        self.figure_system_prompt = figure_system_prompt or DEFAULT_FIGURE_SYSTEM_PROMPT
+        self.figure_summary_max_tokens = max(0, int(figure_summary_max_tokens))
+        self.figure_summary_prefix = DEFAULT_FIGURE_SUMMARY_PREFIX
         self._model = None
         self._processor = None
         self._config = None
@@ -195,7 +217,8 @@ class DocumentOCRMarkdownGenerator:
 
         page_prompt = (
             f"Document: {document_name}. Page {page.index} of {total_pages}. "
-            "Transcribe the provided page to Markdown, preserving hierarchy, tables, and lists. "
+            "Transcribe the provided page to Markdown, preserving hierarchy, tables, lists, math, "
+            "and describing any visual elements in text so they can be understood without the image. "
             "Do not add commentary or restate the instructions."
         )
 
@@ -204,57 +227,227 @@ class DocumentOCRMarkdownGenerator:
             {"role": "user", "content": page_prompt},
         ]
 
-        formatted_prompt = cast(
+        image_argument = self._prepare_image_argument(page.image_input)
+        transcript = self._generate_from_messages(messages, image_argument, self.max_tokens)
+        enriched = self._augment_figures(
+            page=page,
+            transcript=transcript,
+            total_pages=total_pages,
+            document_name=document_name,
+        )
+
+        return enriched
+
+    def _resize_image(self, image: Image.Image) -> Image.Image:
+        width, height = image.size
+        longest_edge = max(width, height)
+        if longest_edge <= self.max_image_side:
+            return image.copy()
+        scale = self.max_image_side / float(longest_edge)
+        new_size = (
+            max(1, int(width * scale)),
+            max(1, int(height * scale)),
+        )
+        return image.resize(new_size, Image.Resampling.LANCZOS)
+
+    def _prepare_image_argument(self, image_input: ImageInput) -> List[ImageInput]:
+        if isinstance(image_input, Image.Image):
+            return [self._resize_image(image_input)]
+
+        image_path = Path(image_input)
+        try:
+            with Image.open(image_path) as raw_image:
+                rgb_image = raw_image.convert('RGB')
+                resized = self._resize_image(rgb_image)
+                return [resized]
+        except (OSError, FileNotFoundError):
+            return [str(image_input)]
+
+    def _format_messages(self, messages: List[dict], num_images: int) -> str:
+        return cast(
             str,
             apply_chat_template(
                 self._processor,
                 self._config,
                 messages,
-                num_images=1,
+                num_images=num_images,
             ),
         )
 
-        image_argument: List[ImageInput]
-        if isinstance(page.image_input, Image.Image):
-            image = page.image_input
-            width, height = image.size
-            longest_edge = max(width, height)
-            if longest_edge > self.max_image_side:
-                scale = self.max_image_side / float(longest_edge)
-                new_size = (
-                    max(1, int(width * scale)),
-                    max(1, int(height * scale)),
-                )
-                image = image.resize(new_size, Image.Resampling.LANCZOS)
-            image_argument = [image]
-        else:
-            image_path = Path(page.image_input)
-            try:
-                with Image.open(image_path) as raw_image:
-                    image = raw_image.convert("RGB")
-                    width, height = image.size
-                    longest_edge = max(width, height)
-                    if longest_edge > self.max_image_side:
-                        scale = self.max_image_side / float(longest_edge)
-                        new_size = (
-                            max(1, int(width * scale)),
-                            max(1, int(height * scale)),
-                        )
-                        image = image.resize(new_size, Image.Resampling.LANCZOS)
-                    image_argument = [image.copy()]
-            except (OSError, FileNotFoundError):
-                image_argument = [str(page.image_input)]
+    def _generate_from_messages(
+        self,
+        messages: List[dict],
+        image_argument: List[ImageInput],
+        max_tokens: Optional[int] = None,
+    ) -> str:
+        formatted_prompt = self._format_messages(messages, len(image_argument))
+        return self._run_generation(formatted_prompt, image_argument, max_tokens)
 
+    def _run_generation(
+        self,
+        prompt: str,
+        image_argument: List[ImageInput],
+        max_tokens: Optional[int] = None,
+    ) -> str:
         result = generate_text(
             self._model,
             self._processor,
-            formatted_prompt,
+            prompt,
             image=image_argument,
             temperature=self.temperature,
-            max_tokens=self.max_tokens,
+            max_tokens=max_tokens or self.max_tokens,
             verbose=False,
         )
         return result.text.strip()
+
+    def _clone_image_argument(self, image_argument: List[ImageInput]) -> List[ImageInput]:
+        cloned: List[ImageInput] = []
+        for item in image_argument:
+            if isinstance(item, Image.Image):
+                cloned.append(item.copy())
+            else:
+                cloned.append(item)
+        return cloned
+
+    def _extract_figure_caption(self, line: str) -> Optional[str]:
+        match = FIGURE_CAPTION_PATTERN.match(line.strip())
+        if not match:
+            return None
+        caption = match.group("caption").strip()
+        if caption.lower().startswith("fig"):
+            caption = re.sub(r"^fig(?:ure)?\.?", "Figure", caption, flags=re.IGNORECASE).strip()
+        return caption
+
+    def _has_existing_summary(self, lines: List[str], idx: int) -> bool:
+        for offset in range(1, 4):
+            look_index = idx + offset
+            if look_index >= len(lines):
+                break
+            candidate = lines[look_index].strip()
+            if not candidate:
+                continue
+            normalized = candidate.lstrip("> ").lower()
+            if normalized.startswith("figure insight:") or normalized.startswith("figure summary:"):
+                return True
+            break
+        return False
+
+    def _describe_figure(
+        self,
+        page: DocumentPage,
+        caption: str,
+        total_pages: int,
+        document_name: str,
+        image_argument: List[ImageInput],
+    ) -> str:
+        if not self.figure_system_prompt or self.figure_summary_max_tokens <= 0:
+            return ""
+
+        figure_prompt = (
+            f"Document: {document_name}. Page {page.index} of {total_pages}. "
+            f"Caption: {caption}. Summarize the visual described by this caption in one or two sentences, "
+            "highlighting axes, units, trends, and notable numeric ranges so a reader understands the key takeaway. "
+            "If the figure is not visible or illegible, reply with 'Unable to summarize figure.'"
+        )
+        messages = [
+            {"role": "system", "content": self.figure_system_prompt},
+            {"role": "user", "content": figure_prompt},
+        ]
+        result = self._generate_from_messages(messages, image_argument, max_tokens=self.figure_summary_max_tokens)
+        return result.strip()
+
+    def _clean_summary(self, caption: str, summary: str) -> str:
+        if not summary:
+            return ""
+        text = re.sub(r"\s+", " ", summary).strip()
+        text = text.split("---", 1)[0]
+        text = text.split("<!--", 1)[0]
+        text = re.sub(r"\s+", " ", text).strip()
+        if not text:
+            return ""
+
+        normalized_caption = re.sub(r"\s+", " ", caption).strip().lower()
+        candidate = text.lower()
+        if candidate.startswith(normalized_caption):
+            trimmed = text[len(normalized_caption):].lstrip(" :,-")
+            if trimmed:
+                text = trimmed
+
+        sentences = re.split(r"(?<=[.!?])\s+", text)
+        sentences = [sentence.strip() for sentence in sentences if sentence.strip()]
+        if sentences:
+            text = " ".join(sentences[:2]).strip()
+        else:
+            words = text.split()
+            if not words:
+                return ""
+            limit = min(len(words), 40)
+            text = " ".join(words[:limit]).strip()
+            if len(words) > limit:
+                text = f"{text}..."
+
+        if text and text[-1] not in ".!?":
+            if len(text.split()) < 4:
+                return ""
+            text = f"{text}."
+
+        return text
+
+    def _augment_figures(
+        self,
+        page: DocumentPage,
+        transcript: str,
+        total_pages: int,
+        document_name: str,
+    ) -> str:
+        lines = transcript.splitlines()
+        figure_entries: List[tuple[int, str]] = []
+        seen_captions: set[str] = set()
+        for idx, line in enumerate(lines):
+            caption = self._extract_figure_caption(line)
+            if not caption:
+                continue
+            normalized_caption = " ".join(caption.split())
+            if normalized_caption.lower() in seen_captions:
+                continue
+            if self._has_existing_summary(lines, idx):
+                continue
+            figure_entries.append((idx, caption))
+            seen_captions.add(normalized_caption.lower())
+
+        if not figure_entries:
+            return transcript
+
+        prepared_images: Optional[List[ImageInput]] = None
+        inserted = 0
+        for idx, caption in figure_entries:
+            if prepared_images is None:
+                prepared_images = self._prepare_image_argument(page.image_input)
+            image_argument = self._clone_image_argument(prepared_images)
+            summary = self._describe_figure(
+                page=page,
+                caption=caption,
+                total_pages=total_pages,
+                document_name=document_name,
+                image_argument=image_argument,
+            )
+            if not summary:
+                continue
+            normalized_summary = " ".join(summary.split())
+            if not normalized_summary:
+                continue
+            normalized_summary = self._clean_summary(caption, normalized_summary)
+            if not normalized_summary:
+                continue
+            lowered = normalized_summary.lower()
+            if lowered.startswith("unable to summarize figure"):
+                continue
+            insertion_line = f"> {self.figure_summary_prefix}: {normalized_summary}"
+            insert_position = idx + 1 + inserted
+            lines.insert(insert_position, insertion_line)
+            inserted += 1
+
+        return "\n".join(lines)
 
 
 def _render_pdf(path: Path, dpi: int) -> List[Image.Image]:
@@ -372,7 +565,14 @@ def process_document(
     full_markdown = compose_document_markdown(metadata, page_markdown)
     output_path = output_dir / "index.md"
     output_path.write_text(full_markdown, encoding="utf-8")
-    logger.info("Saved Markdown to %s", output_path)
+    logger.info(
+        "Processed %s in %.2fs (%d %s); saved Markdown to %s",
+        path,
+        total_elapsed,
+        total_pages,
+        "page" if total_pages == 1 else "pages",
+        output_path,
+    )
 
     return DocumentResult(
         source_path=path,

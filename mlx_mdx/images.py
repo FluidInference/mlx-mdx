@@ -12,7 +12,7 @@ from filetype import guess
 from .models import ImageAsset, ImageCandidate
 from .utils import slugify
 
-logger = logging.getLogger("mlx_crawler")
+logger = logging.getLogger("mlx_mdx")
 
 MAX_IMAGE_BYTES = 10 * 1024 * 1024
 MIN_IMAGE_BYTES = 512

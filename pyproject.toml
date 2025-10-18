@@ -1,6 +1,6 @@
 [project]
-name = "mlx-crawler"
-version = "0.1.0"
+name = "mlx-mdx"
+version = "0.0.3"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -16,14 +16,15 @@ dependencies = [
     "pypdfium2",
     "readability-lxml",
     "requests",
+    "torchvision>=0.24.0",
 ]
 
 [project.scripts]
-mlx-crawler = "mlx_crawler.cli:main"
+mlx-mdx = "mlx_mdx.cli:main"
 
 [build-system]
 requires = ["setuptools>=61", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
-include = ["mlx_crawler"]
+include = ["mlx_mdx"]
