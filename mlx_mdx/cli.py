@@ -80,6 +80,11 @@ def _add_crawl_arguments(parser: argparse.ArgumentParser) -> None:
         action="store_true",
         help="Enable verbose logging",
     )
+    parser.add_argument(
+        "--mcp",
+        action="store_true",
+        help="Emit crawler output to STDOUT as Markdown (suitable for MCP)",
+    )
 
 
 def _add_document_arguments(parser: argparse.ArgumentParser) -> None:
@@ -161,10 +166,14 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
 
 
 def _run_crawl(args: argparse.Namespace) -> None:
+    level = logging.DEBUG if args.verbose else logging.INFO
+    if args.mcp and not args.verbose:
+        level = logging.ERROR
     logging.basicConfig(
-        level=logging.DEBUG if args.verbose else logging.INFO,
+        level=level,
         format="%(asctime)s [%(levelname)s] %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
+        force=True,
     )
 
     config = CrawlConfig(
@@ -181,18 +190,19 @@ def _run_crawl(args: argparse.Namespace) -> None:
     overall_start = time.perf_counter()
     metrics = asyncio.run(run_crawler(args.urls, config, generator))
     total_elapsed = time.perf_counter() - overall_start
-
+    
+    successes = len(metrics)
+    total_urls = len(args.urls)
+    failures = total_urls - successes
+    logger.info(
+        "Finished in %.2fs (%d/%d succeeded, %d failed)",
+        total_elapsed,
+        successes,
+        total_urls,
+        failures,
+    )
+    
     if args.verbose:
-        successes = len(metrics)
-        total_urls = len(args.urls)
-        failures = total_urls - successes
-        logger.debug(
-            "Crawler finished in %.2fs (%d/%d succeeded, %d failed)",
-            total_elapsed,
-            successes,
-            total_urls,
-            failures,
-        )
         for metric in metrics:
             logger.debug(
                 "Timing for %s -> total: %.2fs | inference: %.2fs | model_load: %.2fs",
@@ -202,12 +212,23 @@ def _run_crawl(args: argparse.Namespace) -> None:
                 metric.model_load_seconds,
             )
 
+    if args.mcp:
+        for idx, metric in enumerate(metrics):
+            markdown = metric.markdown
+            if idx:
+                if not markdown.startswith("\n"):
+                    sys.stdout.write("\n")
+            sys.stdout.write(markdown if markdown.endswith("\n") else markdown + "\n")
+        sys.stdout.flush()
+        return
+
 
 def _run_documents(args: argparse.Namespace) -> None:
     logging.basicConfig(
         level=logging.DEBUG if args.verbose else logging.INFO,
         format="%(asctime)s [%(levelname)s] %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
+        force=True,
     )
 
     config = DocumentConfig(

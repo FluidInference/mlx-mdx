@@ -40,6 +40,7 @@ class ProcessMetrics:
     total_seconds: float
     inference_seconds: float
     model_load_seconds: float
+    markdown: str
 
 
 @dataclass
@@ -138,34 +139,30 @@ async def run_crawler(
     if not prepared_pages:
         return metrics
 
-    requests = [
-        MarkdownRequest(
+    bodies: List[str] = []
+    inference_times: List[float] = []
+    for idx, page in enumerate(prepared_pages, start=1):
+        logger.debug("Generating Markdown %d/%d for %s", idx, len(prepared_pages), page.url)
+        request = MarkdownRequest(
             metadata=page.metadata,
             content_html=page.content_html,
             plain_text=page.plain_text,
             images=page.assets,
         )
-        for page in prepared_pages
-    ]
-
-    inference_start = time.perf_counter()
-    bodies = generator.generate_bodies(requests)
-    inference_elapsed = time.perf_counter() - inference_start
-
-    if len(bodies) != len(prepared_pages):
-        raise RuntimeError(
-            "Mismatch between generated bodies and prepared pages "
-            f"({len(bodies)} != {len(prepared_pages)})"
+        gen_start = time.perf_counter()
+        body = generator.generate_body(
+            request.metadata,
+            request.content_html,
+            request.plain_text,
+            request.images,
         )
+        bodies.append(body)
+        inference_times.append(time.perf_counter() - gen_start)
 
     load_elapsed = generator.consume_model_load_seconds()
     load_times = [0.0 for _ in prepared_pages]
     if load_elapsed and load_times:
         load_times[0] = load_elapsed
-
-    inference_per_item = (
-        inference_elapsed / len(prepared_pages) if prepared_pages else 0.0
-    )
 
     for idx, (page, body_markdown) in enumerate(zip(prepared_pages, bodies)):
         body_markdown = strip_code_fence(body_markdown)
@@ -182,8 +179,9 @@ async def run_crawler(
                 url=page.url,
                 output_path=output_path,
                 total_seconds=total_elapsed,
-                inference_seconds=inference_per_item,
+                inference_seconds=inference_times[idx] if idx < len(inference_times) else 0.0,
                 model_load_seconds=load_times[idx],
+                markdown=markdown,
             )
         )
     return metrics
