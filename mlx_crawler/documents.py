@@ -7,7 +7,7 @@ import os
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Optional, Sequence, Union
+from typing import List, Optional, Sequence, Union, cast
 
 try:  # Optional PDF rendering support
     import pypdfium2 as pdfium
@@ -204,11 +204,14 @@ class DocumentOCRMarkdownGenerator:
             {"role": "user", "content": page_prompt},
         ]
 
-        formatted_prompt = apply_chat_template(
-            self._processor,
-            self._config,
-            messages,
-            num_images=1,
+        formatted_prompt = cast(
+            str,
+            apply_chat_template(
+                self._processor,
+                self._config,
+                messages,
+                num_images=1,
+            ),
         )
 
         image_argument: List[ImageInput]

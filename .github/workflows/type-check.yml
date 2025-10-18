@@ -27,4 +27,4 @@ jobs:
         run: uv pip install --python .venv/bin/python .
 
       - name: Type check with ty
-        run: uv tool run ty check --python .venv/bin/python
+        run: uvx ty check
