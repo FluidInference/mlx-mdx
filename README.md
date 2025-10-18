@@ -12,27 +12,28 @@ This will not give you cloud level performances but it gets you maybe 70-80% of 
 
 The resulting Markdown stays LLM-ready—headings, tables, and figure takeaways are explicit—so you can feed it straight into retrieval pipelines or even wire `mlx-mdx` up as an MCP tool to auto-parse documents on demand.
 
-## Power of AI
-
-Before -> After: the graph in a PDF becomes structured text that mermaid can render.
+**Before -> After:**
 
 <table>
   <tr>
-    <td width="55%" align="center">
-      <img src="mermaid-example.png" alt="Power of AI slide" width="360">
+    <td width="55%" align="center" valign="top">
+      <img src="./mermaid-example.png" alt="Power of AI slide" width="360">
     </td>
-    <td width="5%" align="center">&rarr;</td>
-    <td width="40%">
-      <pre><code class="language-mermaid">graph LR
+    <td width="5%" align="center" valign="top">&rarr;</td>
+    <td width="40%" valign="top">
+      <small><small><pre><code class="language-mermaid">graph LR
     A[NVIDIA GPU VRAM] --> B[Scenario 1: Both CUDA and Mac devices have enough memory]
     A --> C[Scenario 2: CUDA device has insufficient memory, but Mac device has enough memory]
     A --> D[Scenario 3: Mac device has enough memory but quite near the capacity while CUDA device has insufficient memory]
     B --> E[Apple Silicon Unified Memory]
     C --> E
-    D --> E</code></pre>
+    D --> E</code></pre></small></small>
     </td>
   </tr>
 </table>
+
+The graph in a PDF becomes structured text that mermaid can render.
+
 
 ## Key Capabilities
 
