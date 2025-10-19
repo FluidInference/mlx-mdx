@@ -70,6 +70,99 @@ uv tool run mlx-mdx -- document examples/2501.14925v2.pdf --output output/mlx-do
 
 `uv tool run` ensures the tool executes inside the managed environment even if your shell `PATH` is unaware of `~/.local/bin`. Swap `crawl` for `document` to run the OCR pipeline.
 
+## MCP integrations
+
+mlx-mdx can participate in MCP workflows two ways:
+
+- **One-shot CLI streaming** — run the existing CLI with `--mcp` to emit Markdown on STDOUT.
+- **Persistent MCP server** — launch the bundled `mlx-mdx-mcp` command so clients can discover the `crawl` and `document` tools without extra arguments.
+
+### Option 1: Stream with the CLI
+
+```bash
+uv tool run mlx-mdx -- crawl "{{url}}" --mcp --wait 2.0
+uv tool run mlx-mdx -- document /path/to/file-or-folder --mcp --verbose
+```
+
+Configure your MCP client to execute the appropriate command (replace `crawl` with `document` for the OCR pipeline) and it will receive the generated Markdown over stdout.
+
+### Option 2: Run the MCP server
+
+```bash
+uv run mlx-mdx-mcp
+```
+
+(This runs the server from the current checkout; once a release includes the new entry point, you can also `uv tool install` the package and call `uv tool run mlx-mdx-mcp`.)
+
+The server keeps memory usage low by loading MLX models only while a request is active. It exposes two tools:
+
+- `crawl(url)` — render a URL with Playwright and rewrite it as Markdown using default settings.
+- `document(path)` — transcribe PDFs, standalone images, or directories of page captures using default settings.
+
+Each client below supports registering a local stdio command as a custom MCP server. Point the command at `uv run --project /ABS/PATH/TO/mlx-mdx mlx-mdx-mcp` (swap in `uv tool run mlx-mdx-mcp` once a release ships) and both tools will appear automatically. For custom parameters (alternative models, longer timeouts, etc.), keep using the CLI streaming mode from option 1.
+
+- **Codex CLI** — in `~/.codex/config.toml`:
+
+  ```toml
+  [mcp_servers.mlx_mdx]
+  command = "uv"
+  args = ["run", "--project", "/ABS/PATH/TO/mlx-mdx", "mlx-mdx-mcp"]
+  ```
+
+- **Claude Code** — extend `~/Library/Application Support/Claude/claude_desktop_config.json`:
+
+  ```jsonc
+  "mcpServers": {
+    "mlx-mdx": {
+      "command": "uv",
+      "args": ["run", "--project", "/ABS/PATH/TO/mlx-mdx", "mlx-mdx-mcp"]
+    }
+  }
+  ```
+
+- **Cursor** — edit `~/.cursor/mcp.json`:
+
+  ```json
+  {
+    "mcpServers": {
+      "mlx-mdx": {
+        "command": "uv",
+        "args": ["run", "--project", "/ABS/PATH/TO/mlx-mdx", "mlx-mdx-mcp"]
+      }
+    }
+  }
+  ```
+
+- **Zed** — add a custom server in `~/.config/zed/settings.json` (see [Zed’s MCP guide](https://raw.githubusercontent.com/zed-industries/zed/main/docs/src/ai/mcp.md)):
+
+  ```json
+  {
+    "context_servers": {
+      "mlx-mdx": {
+        "source": "custom",
+        "command": "uv",
+        "args": ["run", "--project", "/ABS/PATH/TO/mlx-mdx", "mlx-mdx-mcp"]
+      }
+    }
+  }
+  ```
+
+- **OpenCode (Factory CLI)** — update `~/.factory/mcp.json`:
+
+  ```json
+  {
+    "mcpServers": {
+      "mlx-mdx": {
+        "command": "uv",
+        "args": ["run", "--project", "/ABS/PATH/TO/mlx-mdx", "mlx-mdx-mcp"]
+      }
+    }
+  }
+  ```
+
+Add a second entry pointing at the CLI streaming command if you need fine-grained control (custom tokens, timeouts, etc.) alongside the persistent server. Replace `/ABS/PATH/TO/mlx-mdx` with the absolute path to this repository. Once a packaged release is available, you can switch the args back to `"tool", "run", "mlx-mdx-mcp"`.
+
+
 ## Usage
 
 The CLI exposes two focused subcommands. For backward compatibility, calling `mlx-mdx <url>` still routes to `crawl`.
