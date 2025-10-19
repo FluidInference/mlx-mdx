@@ -140,6 +140,11 @@ def _add_document_arguments(parser: argparse.ArgumentParser) -> None:
         action="store_true",
         help="Enable verbose logging",
     )
+    parser.add_argument(
+        "--mcp",
+        action="store_true",
+        help="Emit OCR output to STDOUT as Markdown (suitable for MCP)",
+    )
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
@@ -224,8 +229,11 @@ def _run_crawl(args: argparse.Namespace) -> None:
 
 
 def _run_documents(args: argparse.Namespace) -> None:
+    level = logging.DEBUG if args.verbose else logging.INFO
+    if args.mcp and not args.verbose:
+        level = logging.ERROR
     logging.basicConfig(
-        level=logging.DEBUG if args.verbose else logging.INFO,
+        level=level,
         format="%(asctime)s [%(levelname)s] %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
         force=True,
@@ -278,6 +286,16 @@ def _run_documents(args: argparse.Namespace) -> None:
                 res.page_count,
                 res.total_seconds,
             )
+
+
+    if args.mcp:
+        for idx, res in enumerate(results):
+            markdown = res.markdown
+            if idx and not markdown.startswith("\n"):
+                sys.stdout.write("\n")
+            sys.stdout.write(markdown if markdown.endswith("\n") else markdown + "\n")
+        sys.stdout.flush()
+        return
 
 
 def main(argv: Sequence[str] | None = None) -> None:

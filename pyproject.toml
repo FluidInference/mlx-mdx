@@ -13,6 +13,7 @@ dependencies = [
     "numpy>=2.1.0",
     "pillow",
     "playwright",
+    "mcp[cli]",
     "pypdfium2",
     "readability-lxml",
     "requests",
@@ -21,6 +22,7 @@ dependencies = [
 
 [project.scripts]
 mlx-mdx = "mlx_mdx.cli:main"
+mlx-mdx-mcp = "mlx_mdx.mcp_server:main"
 
 [build-system]
 requires = ["setuptools>=61", "wheel"]

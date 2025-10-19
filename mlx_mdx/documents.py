@@ -79,6 +79,7 @@ class DocumentResult:
     output_path: Path
     page_count: int
     total_seconds: float
+    markdown: str
 
 
 @dataclass
@@ -579,4 +580,5 @@ def process_document(
         output_path=output_path,
         page_count=total_pages,
         total_seconds=total_elapsed,
+        markdown=full_markdown,
     )
