@@ -13,18 +13,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v2
         with:
           python-version: "3.12"
+          cache-dependency-path: |
+            pyproject.toml
+            uv.lock
 
-      - name: Install uv
-        run: pip install uv
-
-      - name: Create virtual environment
-        run: uv venv --python 3.12
-
-      - name: Install project dependencies
-        run: uv pip install --python .venv/bin/python .
+      - name: Sync project dependencies
+        run: uv sync --frozen
 
       - name: Type check with ty
-        run: uvx ty check
+        run: uv run --frozen --with ty ty check
