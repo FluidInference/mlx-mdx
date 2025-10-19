@@ -11,13 +11,17 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - name: Set up uv
-        uses: astral-sh/setup-uv@v2
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
-          cache-dependency-path: |
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          cache-dependency-glob: |
             pyproject.toml
             uv.lock
 
